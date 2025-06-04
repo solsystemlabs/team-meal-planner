@@ -27,7 +27,7 @@ export class MockSupabaseService {
     return { user: null, error: "Invalid credentials" };
   }
 
-  async signUp(email: string, password: string, name: string) {
+  async signUp(email: string, _password: string, name: string) {
     await new Promise((resolve) => setTimeout(resolve, 500));
     const newUser: User = {
       id: String(Date.now()),
