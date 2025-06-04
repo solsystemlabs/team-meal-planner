@@ -1,177 +1,105 @@
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  GripVertical,
-  Trophy,
-  Save,
-  RotateCcw,
-  ChevronDown,
-  Crown,
-} from "lucide-react";
-import { Suggestion, Vote, Attendance } from "../types/database";
+import React, { useState, useEffect } from "react";
+import { GripVertical, Trophy, Save, RotateCcw } from "lucide-react";
+import { Suggestion, Vote } from "../types/database";
 import { useAuth } from "../contexts/AuthContext";
 
 interface DragDropVotingProps {
   suggestions: Suggestion[];
   votes: Vote[];
-  attendance: Attendance[];
   winnerSuggestionId: string;
   isUserAttending: boolean;
-  isLoading?: boolean;
   onVotesUpdate: (newVotes: { suggestion_id: string; rank: number }[]) => void;
 }
 
 interface RankedSuggestion extends Suggestion {
   userRank: number;
-  userPoints: number;
-  totalScore: number;
-  totalVotes: number;
-  overallRank: number;
+  teamAverage: number;
+  teamTotal: number;
 }
-
-type SortMode = "my-ranking" | "team-ranking" | "alphabetical" | "newest";
 
 export const DragDropVoting: React.FC<DragDropVotingProps> = ({
   suggestions,
   votes,
-  attendance,
   winnerSuggestionId,
   isUserAttending,
-  isLoading = false,
   onVotesUpdate,
 }) => {
   const { user } = useAuth();
+  const [rankedSuggestions, setRankedSuggestions] = useState<
+    RankedSuggestion[]
+  >([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>("my-ranking");
-  const [temporaryOrder, setTemporaryOrder] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<"user" | "team" | "alphabetical">(
+    "user",
+  );
 
-  // Reset temporary order when sort mode changes or data changes
+  // Initialize ranked suggestions
   useEffect(() => {
-    setTemporaryOrder([]);
-    setHasChanges(false);
-  }, [suggestions, votes, attendance, user, sortMode]);
+    if (!user || !suggestions.length) return;
 
-  // Compute attending users
-  const attendingUsers = useMemo(() => {
-    if (!attendance) return [];
-    return attendance.filter((a) => a.is_attending).map((a) => a.user_id);
-  }, [attendance]);
-
-  // Compute relevant votes from attending users
-  const relevantVotes = useMemo(() => {
-    if (!votes) return [];
-    return votes.filter((v) => attendingUsers.includes(v.user_id));
-  }, [votes, attendingUsers]);
-
-  // Compute user votes
-  const userVotes = useMemo(() => {
-    if (!votes || !user) return [];
-    return votes.filter((v) => v.user_id === user.id);
-  }, [votes, user]);
-
-  // Compute overall scores and rankings
-  const overallData = useMemo(() => {
-    if (!suggestions || !relevantVotes) return new Map();
-
-    const overallScores = new Map<
-      string,
-      { totalScore: number; voteCount: number }
-    >();
-    relevantVotes.forEach((vote) => {
-      const current = overallScores.get(vote.suggestion_id) || {
-        totalScore: 0,
-        voteCount: 0,
-      };
-      overallScores.set(vote.suggestion_id, {
-        totalScore: current.totalScore + vote.rank,
-        voteCount: current.voteCount + 1,
-      });
-    });
-
-    // Create rankings based on total scores
-    const overallSorted = [...suggestions].sort((a, b) => {
-      const scoreA = overallScores.get(a.id)?.totalScore || 0;
-      const scoreB = overallScores.get(b.id)?.totalScore || 0;
-      return scoreB - scoreA;
-    });
-
-    const rankings = new Map<string, number>();
-    overallSorted.forEach((suggestion, index) => {
-      rankings.set(suggestion.id, index + 1);
-    });
-
-    return { scores: overallScores, rankings };
-  }, [suggestions, relevantVotes]);
-
-  // Compute ranked suggestions with all data
-  const rankedSuggestions = useMemo((): RankedSuggestion[] => {
-    if (!suggestions || !user) return [];
-
-    const maxRank = suggestions.length;
+    const userVotes = votes.filter((v) => v.user_id === user.id);
 
     const ranked = suggestions.map((suggestion) => {
       const userVote = userVotes.find((v) => v.suggestion_id === suggestion.id);
-      const userRank = userVote ? maxRank - userVote.rank + 1 : 0;
-      const userPoints = userVote ? userVote.rank : 0;
 
-      const overallInfo = overallData.scores.get(suggestion.id) || {
-        totalScore: 0,
-        voteCount: 0,
-      };
-      const overallRank = overallData.rankings.get(suggestion.id) || 0;
+      // Calculate team stats
+      const suggestionVotes = votes.filter(
+        (v) => v.suggestion_id === suggestion.id,
+      );
+      const totalTeamScore = suggestionVotes.reduce(
+        (sum, vote) => sum + vote.rank,
+        0,
+      );
+      const teamVoteCount = suggestionVotes.length;
+      const averageTeamRank =
+        teamVoteCount > 0 ? totalTeamScore / teamVoteCount : 0;
 
       return {
         ...suggestion,
-        userRank,
-        userPoints,
-        totalScore: overallInfo.totalScore,
-        totalVotes: overallInfo.voteCount,
-        overallRank,
+        // Fix: userRank should be the actual DB rank, not converted
+        userRank: userVote ? userVote.rank : 0,
+        teamAverage: averageTeamRank,
+        teamTotal: totalTeamScore,
       };
     });
 
-    // If we have a temporary order from dragging, use that for 'my-ranking' mode
-    if (sortMode === "my-ranking" && temporaryOrder.length > 0) {
-      return temporaryOrder
-        .map((id) => ranked.find((r) => r.id === id)!)
-        .filter(Boolean);
+    // Sort based on selected sort option
+    if (sortBy === "user") {
+      // Sort by user rank (highest DB rank first), then by creation date for unranked items
+      ranked.sort((a, b) => {
+        if (a.userRank === 0 && b.userRank === 0) {
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        }
+        if (a.userRank === 0) return 1;
+        if (b.userRank === 0) return -1;
+        return b.userRank - a.userRank; // Higher DB rank = better = first in list
+      });
+    } else if (sortBy === "team") {
+      // Sort by team average (highest first)
+      ranked.sort((a, b) => {
+        if (a.teamAverage === 0 && b.teamAverage === 0) {
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        }
+        if (a.teamAverage === 0) return 1;
+        if (b.teamAverage === 0) return -1;
+        return b.teamAverage - a.teamAverage;
+      });
+    } else if (sortBy === "alphabetical") {
+      // Sort alphabetically by restaurant name
+      ranked.sort((a, b) => a.restaurant.localeCompare(b.restaurant));
     }
 
-    // Otherwise, sort based on sort mode
-    switch (sortMode) {
-      case "my-ranking":
-        ranked.sort((a, b) => {
-          if (a.userRank === 0 && b.userRank === 0) {
-            return (
-              new Date(a.created_at).getTime() -
-              new Date(b.created_at).getTime()
-            );
-          }
-          if (a.userRank === 0) return 1;
-          if (b.userRank === 0) return -1;
-          return b.userRank - a.userRank;
-        });
-        break;
-      case "team-ranking":
-        ranked.sort((a, b) => b.totalScore - a.totalScore);
-        break;
-      case "alphabetical":
-        ranked.sort((a, b) => a.restaurant.localeCompare(b.restaurant));
-        break;
-      case "newest":
-        ranked.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        break;
-    }
-
-    return ranked;
-  }, [suggestions, user, userVotes, overallData, sortMode, temporaryOrder]);
+    setRankedSuggestions(ranked);
+    setHasChanges(false);
+  }, [suggestions, votes, user, sortBy]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    if (sortMode !== "my-ranking") return;
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = "move";
   };
@@ -181,7 +109,6 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (sortMode !== "my-ranking") return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
@@ -189,38 +116,38 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
 
-    if (
-      sortMode !== "my-ranking" ||
-      draggedIndex === null ||
-      draggedIndex === dropIndex
-    )
-      return;
+    if (draggedIndex === null || draggedIndex === dropIndex) return;
 
-    const newOrder = [...rankedSuggestions];
-    const draggedItem = newOrder[draggedIndex];
+    const newRanked = [...rankedSuggestions];
+    const draggedItem = newRanked[draggedIndex];
 
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(dropIndex, 0, draggedItem);
+    // Remove the dragged item
+    newRanked.splice(draggedIndex, 1);
 
-    setTemporaryOrder(newOrder.map((item) => item.id));
+    // Insert at new position
+    newRanked.splice(dropIndex, 0, draggedItem);
+
+    setRankedSuggestions(newRanked);
     setHasChanges(true);
     setDraggedIndex(null);
   };
 
   const handleSave = async () => {
-    if (!user || !hasChanges || sortMode !== "my-ranking") return;
+    if (!user || !hasChanges) return;
 
     setIsSaving(true);
     try {
       const maxRank = rankedSuggestions.length;
       const newVotes = rankedSuggestions.map((suggestion, index) => ({
         suggestion_id: suggestion.id,
+        // Convert display position to DB rank:
+        // Position 0 (first/best) gets highest rank (maxRank)
+        // Position 1 gets maxRank-1, etc.
         rank: maxRank - index,
       }));
 
       await onVotesUpdate(newVotes);
       setHasChanges(false);
-      setTemporaryOrder([]);
     } catch (error) {
       console.error("Error saving votes:", error);
     } finally {
@@ -229,25 +156,63 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
   };
 
   const handleReset = () => {
-    if (sortMode !== "my-ranking") return;
-    setTemporaryOrder([]);
+    // Reset to original order
+    const userVotes = votes.filter((v) => v.user_id === user?.id);
+
+    const ranked = suggestions.map((suggestion) => {
+      const userVote = userVotes.find((v) => v.suggestion_id === suggestion.id);
+
+      // Calculate team stats
+      const suggestionVotes = votes.filter(
+        (v) => v.suggestion_id === suggestion.id,
+      );
+      const totalTeamScore = suggestionVotes.reduce(
+        (sum, vote) => sum + vote.rank,
+        0,
+      );
+      const teamVoteCount = suggestionVotes.length;
+      const averageTeamRank =
+        teamVoteCount > 0 ? totalTeamScore / teamVoteCount : 0;
+
+      return {
+        ...suggestion,
+        // Fix: userRank should be the actual DB rank, not converted
+        userRank: userVote ? userVote.rank : 0,
+        teamAverage: averageTeamRank,
+        teamTotal: totalTeamScore,
+      };
+    });
+
+    // Apply the same sorting as in useEffect
+    if (sortBy === "user") {
+      ranked.sort((a, b) => {
+        if (a.userRank === 0 && b.userRank === 0) {
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        }
+        if (a.userRank === 0) return 1;
+        if (b.userRank === 0) return -1;
+        return b.userRank - a.userRank;
+      });
+    } else if (sortBy === "team") {
+      ranked.sort((a, b) => {
+        if (a.teamAverage === 0 && b.teamAverage === 0) {
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        }
+        if (a.teamAverage === 0) return 1;
+        if (b.teamAverage === 0) return -1;
+        return b.teamAverage - a.teamAverage;
+      });
+    } else if (sortBy === "alphabetical") {
+      ranked.sort((a, b) => a.restaurant.localeCompare(b.restaurant));
+    }
+
+    setRankedSuggestions(ranked);
     setHasChanges(false);
   };
-
-  // Show loading state if data is still being fetched or is undefined
-  if (isLoading || !suggestions || !votes || !attendance) {
-    return (
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          Vote on Suggestions
-        </h2>
-        <div className="bg-gray-50 rounded-lg p-6 text-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          <p className="text-gray-600">Loading suggestions...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!isUserAttending) {
     return (
@@ -284,85 +249,82 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
           Rank Your Preferences
         </h2>
         <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700">
+              Sort by:
+            </label>
+            <select
+              value={sortBy}
+              onChange={(e) =>
+                setSortBy(e.target.value as "user" | "team" | "alphabetical")
+              }
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="user">Your Ranking</option>
+              <option value="team">Team Average</option>
+              <option value="alphabetical">Alphabetical</option>
+            </select>
+          </div>
           {winnerSuggestionId && (
             <div className="flex items-center space-x-2 text-yellow-600">
               <Trophy className="w-5 h-5" />
               <span className="font-medium">Current Leader</span>
             </div>
           )}
-
-          {/* Sort Dropdown */}
-          <div className="relative">
-            <select
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
-              className="appearance-none bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 pr-8 font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="my-ranking">Sort by: My Ranking</option>
-              <option value="team-ranking">Sort by: Team Results</option>
-              <option value="alphabetical">Sort by: Alphabetical</option>
-              <option value="newest">Sort by: Newest First</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-          </div>
         </div>
       </div>
 
-      {sortMode === "my-ranking" && (
-        <div className="mb-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800 text-sm">
-              <strong>How to vote:</strong> Drag and drop suggestions to rank
-              them. Your top choice will get the highest score, with each item
-              below worth one point less.
-            </p>
-          </div>
+      <div className="mb-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-blue-800 text-sm">
+            <strong>How to vote:</strong> Drag and drop suggestions to rank
+            them. Your top choice will get the highest score, with each item
+            below worth one point less.
+          </p>
         </div>
-      )}
+      </div>
 
       <div className="space-y-3 mb-6">
         {rankedSuggestions.map((suggestion, index) => {
           const isWinner = suggestion.id === winnerSuggestionId;
           const isDragging = draggedIndex === index;
-          const canDrag = sortMode === "my-ranking";
+          const displayRank = index + 1;
+          const points = rankedSuggestions.length - index;
+
+          // Calculate team voting stats for this suggestion
+          const suggestionVotes = votes.filter(
+            (v) => v.suggestion_id === suggestion.id,
+          );
+          const totalTeamScore = suggestionVotes.reduce(
+            (sum, vote) => sum + vote.rank,
+            0,
+          );
+          const teamVoteCount = suggestionVotes.length;
+          const averageTeamRank =
+            teamVoteCount > 0 ? totalTeamScore / teamVoteCount : 0;
 
           return (
             <div
               key={suggestion.id}
-              draggable={canDrag}
+              draggable
               onDragStart={(e) => handleDragStart(e, index)}
               onDragEnd={handleDragEnd}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, index)}
-              className={`border rounded-xl p-4 transition-all ${
-                canDrag ? "cursor-move" : "cursor-default"
-              } ${
+              className={`border rounded-xl p-4 transition-all cursor-move ${
                 isDragging
                   ? "opacity-50 shadow-lg scale-105"
                   : isWinner
-                    ? "border-yellow-400 bg-gradient-to-r from-yellow-50 to-amber-50 shadow-lg ring-2 ring-yellow-200"
+                    ? "border-yellow-300 bg-yellow-50 shadow-md"
                     : "border-gray-200 hover:border-blue-300 hover:shadow-sm"
               }`}
             >
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
-                  {canDrag && (
-                    <GripVertical className="w-5 h-5 text-gray-400" />
-                  )}
-
-                  {isWinner ? (
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 text-white shadow-lg">
-                      <Crown className="w-6 h-6" />
-                    </div>
-                  ) : sortMode === "my-ranking" ? (
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-slate-700 text-white font-bold text-sm">
-                      {index + 1}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold text-sm">
-                      {suggestion.overallRank}
-                    </div>
-                  )}
+                  <GripVertical className="w-5 h-5 text-gray-400" />
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-slate-700 text-white font-bold text-sm">
+                    {displayRank}
+                  </div>
                 </div>
 
                 <div className="flex-1">
@@ -370,40 +332,60 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
                     <h3 className="font-bold text-lg text-gray-800">
                       {suggestion.restaurant}
                     </h3>
-                    {isWinner && (
-                      <div className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-semibold flex items-center space-x-1">
-                        <Trophy className="w-3 h-3" />
-                        <span>WINNING</span>
-                      </div>
-                    )}
+                    {isWinner && <Trophy className="w-5 h-5 text-yellow-600" />}
                   </div>
                   {suggestion.description && (
                     <p className="text-gray-600 text-sm mb-1">
                       {suggestion.description}
                     </p>
                   )}
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 mb-2">
                     Suggested by {suggestion.user_name}
                   </p>
+
+                  {/* Team voting breakdown */}
+                  {teamVoteCount > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Team stats:</span>
+                        <div className="flex space-x-1">
+                          {[...Array(suggestions.length)].map((_, i) => {
+                            const rank = i + 1;
+                            const votesAtRank = suggestionVotes.filter(
+                              (v) => v.rank === rank,
+                            ).length;
+
+                            if (votesAtRank === 0) return null;
+
+                            return (
+                              <div
+                                key={rank}
+                                className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
+                              >
+                                #{rank}: {votesAtRank}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Team total: {totalTeamScore} pts • Avg:{" "}
+                        {averageTeamRank.toFixed(1)}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-right space-y-1">
-                  <div className="flex flex-col items-end space-y-1">
-                    {/* Always show both personal and team info */}
-                    <div className="text-sm font-bold text-blue-600">
-                      You:{" "}
-                      {suggestion.userPoints > 0
-                        ? `${suggestion.userPoints}pts (#${suggestion.userRank})`
-                        : "Not ranked"}
-                    </div>
-                    <div className="text-sm font-bold text-green-600">
-                      Team: {suggestion.totalScore}pts (#
-                      {suggestion.overallRank})
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {suggestion.totalVotes} team vote
-                      {suggestion.totalVotes !== 1 ? "s" : ""}
-                    </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-blue-600">
+                    {points} {points === 1 ? "point" : "points"}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {displayRank === 1
+                      ? "Your top choice"
+                      : displayRank === rankedSuggestions.length
+                        ? "Your last choice"
+                        : `Your choice #${displayRank}`}
                   </div>
                 </div>
               </div>
@@ -412,7 +394,7 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
         })}
       </div>
 
-      {hasChanges && sortMode === "my-ranking" && (
+      {hasChanges && (
         <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-lg">
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
