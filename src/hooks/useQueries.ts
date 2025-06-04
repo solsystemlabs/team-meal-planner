@@ -165,9 +165,21 @@ export const useUndoSelection = (weekOf: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (planId: string) => supabaseService.deleteWeekPlan(planId),
+    mutationFn: (planId: string) => {
+      console.log("useUndoSelection mutation called with planId:", planId);
+      return supabaseService.deleteWeekPlan(planId);
+    },
     onSuccess: () => {
-      queryClient.setQueryData(queryKeys.weekPlan(weekOf), null);
+      console.log("Undo mutation successful, updating cache");
+      queryClient.setQueryData(queryKeys.weekPlan(weekOf), undefined);
+
+      // Also invalidate to ensure fresh data
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.weekPlan(weekOf),
+      });
+    },
+    onError: (error) => {
+      console.error("Undo mutation failed:", error);
     },
   });
 };

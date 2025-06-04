@@ -143,10 +143,18 @@ export const NextWeekView: React.FC = () => {
   };
 
   const handleUndoSelection = async () => {
-    if (!user?.is_admin || !weekPlan) return;
+    if (!user?.is_admin || !weekPlan) {
+      console.log("Cannot undo: user not admin or no week plan", {
+        user: user?.is_admin,
+        weekPlan: !!weekPlan,
+      });
+      return;
+    }
 
     try {
+      console.log("Attempting to delete week plan with ID:", weekPlan.id);
       await undoSelectionMutation.mutateAsync(weekPlan.id);
+      console.log("Successfully deleted week plan");
     } catch (error) {
       console.error("Error undoing selection:", error);
       alert("Failed to undo selection. Please try again.");

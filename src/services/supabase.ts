@@ -276,10 +276,15 @@ export class SupabaseService {
       .from("week_plans")
       .select("*")
       .eq("week_of", weekOf)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== "PGRST116") throw error;
-    return data as WeekPlan | undefined;
+    // Any other error should be thrown
+    if (error) {
+      console.error("Error fetching week plan:", error);
+      throw error;
+    }
+
+    return data as WeekPlan;
   }
 
   async createWeekPlan(
@@ -311,12 +316,19 @@ export class SupabaseService {
   }
 
   async deleteWeekPlan(planId: string): Promise<void> {
+    console.log("Deleting week plan with ID:", planId);
+
     const { error } = await supabase
       .from("week_plans")
       .delete()
       .eq("id", planId);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Database error when deleting week plan:", error);
+      throw error;
+    }
+
+    console.log("Week plan deleted successfully from database");
   }
 }
 

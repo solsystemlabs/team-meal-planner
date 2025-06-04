@@ -107,10 +107,15 @@ export const AdminControls: React.FC<AdminControlsProps> = ({
                   onClick={async () => {
                     setIsProcessing(true);
                     try {
-                      await onUndo();
+                      console.log("AdminControls: Starting undo process");
+                      await onUndo(); // This calls handleUndoSelection from NextWeekView
+                      console.log(
+                        "AdminControls: Undo completed, closing dialog",
+                      );
                       setConfirmation({ isOpen: false, type: "confirm" });
                     } catch (error) {
-                      console.error("Error undoing selection:", error);
+                      console.error("AdminControls: Error during undo:", error);
+                      alert("Failed to undo selection. Please try again.");
                     } finally {
                       setIsProcessing(false);
                     }
