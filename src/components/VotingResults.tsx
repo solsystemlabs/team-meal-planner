@@ -177,7 +177,7 @@ export const VotingResults: React.FC<VotingResultsProps> = ({
                         return (
                           <div
                             key={rank}
-                            className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs"
+                            className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
                           >
                             #{rank}: {votesAtRank}
                           </div>

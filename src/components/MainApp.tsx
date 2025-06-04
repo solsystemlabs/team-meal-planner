@@ -8,7 +8,7 @@ export const MainApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"current" | "next">("next");
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200">
       <Header />
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex space-x-1 mb-8 bg-white p-1 rounded-xl shadow-sm">
@@ -16,7 +16,7 @@ export const MainApp: React.FC = () => {
             onClick={() => setActiveTab("current")}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
               activeTab === "current"
-                ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md"
+                ? "bg-gradient-to-r from-blue-500 to-slate-600 text-white shadow-md"
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -29,7 +29,7 @@ export const MainApp: React.FC = () => {
             onClick={() => setActiveTab("next")}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
               activeTab === "next"
-                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
+                ? "bg-gradient-to-r from-slate-600 to-blue-600 text-white shadow-md"
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >

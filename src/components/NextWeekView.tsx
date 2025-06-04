@@ -157,7 +157,7 @@ export const NextWeekView: React.FC = () => {
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
         <p className="text-gray-600">Loading week data...</p>
       </div>
     );
@@ -223,7 +223,7 @@ export const NextWeekView: React.FC = () => {
                   restaurant: e.target.value,
                 })
               }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={addSuggestionMutation.isPending}
             />
             <input
@@ -236,7 +236,7 @@ export const NextWeekView: React.FC = () => {
                   description: e.target.value,
                 })
               }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={addSuggestionMutation.isPending}
             />
             <button
@@ -245,7 +245,7 @@ export const NextWeekView: React.FC = () => {
                 !newSuggestion.restaurant.trim() ||
                 addSuggestionMutation.isPending
               }
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-blue-600 to-slate-700 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-slate-800 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               <Plus className="w-5 h-5" />
               <span>

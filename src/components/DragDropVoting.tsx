@@ -216,13 +216,13 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
                   ? "opacity-50 shadow-lg scale-105"
                   : isWinner
                     ? "border-yellow-300 bg-yellow-50 shadow-md"
-                    : "border-gray-200 hover:border-purple-300 hover:shadow-sm"
+                    : "border-gray-200 hover:border-blue-300 hover:shadow-sm"
               }`}
             >
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <GripVertical className="w-5 h-5 text-gray-400" />
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold text-sm">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-slate-700 text-white font-bold text-sm">
                     {displayRank}
                   </div>
                 </div>
@@ -245,7 +245,7 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <div className="text-sm font-bold text-purple-600">
+                  <div className="text-sm font-bold text-blue-600">
                     {points} {points === 1 ? "point" : "points"}
                   </div>
                   <div className="text-xs text-gray-500">
@@ -282,7 +282,7 @@ export const DragDropVoting: React.FC<DragDropVotingProps> = ({
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="flex items-center space-x-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-lg font-medium hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50"
+              className="flex items-center space-x-1 bg-gradient-to-r from-blue-600 to-slate-700 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-slate-800 transition-all disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? "Saving..." : "Save Rankings"}</span>
