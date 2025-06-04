@@ -7,12 +7,8 @@ import {
   WeekPlan,
 } from "../types/database";
 
-// Use VITE_ prefix for Vite, NEXT_PUBLIC_ for Next.js
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL! || process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY! ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -140,11 +136,18 @@ export class SupabaseService {
   }
 
   async signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { user: data.user, error };
+
+    if (error) {
+      return { user: null, error: error.message };
+    }
+
+    // Get user profile
+    const profile = await this.getCurrentUser();
+    return { user: profile, error: null };
   }
 
   async signOut() {
@@ -268,7 +271,7 @@ export class SupabaseService {
     return data as Attendance;
   }
 
-  async getWeekPlan(weekOf: string): Promise<WeekPlan | null> {
+  async getWeekPlan(weekOf: string): Promise<WeekPlan | undefined> {
     const { data, error } = await supabase
       .from("week_plans")
       .select("*")
@@ -276,7 +279,7 @@ export class SupabaseService {
       .single();
 
     if (error && error.code !== "PGRST116") throw error;
-    return data as WeekPlan | null;
+    return data as WeekPlan | undefined;
   }
 
   async createWeekPlan(
@@ -290,6 +293,30 @@ export class SupabaseService {
 
     if (error) throw error;
     return data as WeekPlan;
+  }
+
+  async updateWeekPlan(
+    planId: string,
+    updates: Database["public"]["Tables"]["week_plans"]["Update"],
+  ): Promise<WeekPlan> {
+    const { data, error } = await supabase
+      .from("week_plans")
+      .update(updates)
+      .eq("id", planId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as WeekPlan;
+  }
+
+  async deleteWeekPlan(planId: string): Promise<void> {
+    const { error } = await supabase
+      .from("week_plans")
+      .delete()
+      .eq("id", planId);
+
+    if (error) throw error;
   }
 }
 
