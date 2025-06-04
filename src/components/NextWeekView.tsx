@@ -271,8 +271,10 @@ export const NextWeekView: React.FC = () => {
         <DragDropVoting
           suggestions={suggestions}
           votes={votes}
+          attendance={attendance}
           winnerSuggestionId={winnerSuggestionId}
           isUserAttending={isUserAttending}
+          isLoading={isLoading}
           onVotesUpdate={handleVotesUpdate}
         />
       ) : (
