@@ -19,6 +19,7 @@ export interface Restaurant {
   };
   website?: string;
   formatted_phone_number?: string;
+  distance_meters?: number; // Added for distance calculation
 }
 
 export interface LocationSearchResult {
@@ -87,13 +88,27 @@ class GooglePlacesService {
     lat: number,
     lng: number,
     radius: number = 2000,
+    options?: {
+      minPrice?: number;
+      maxPrice?: number;
+      openNow?: boolean;
+      keyword?: string;
+    },
   ): Promise<Restaurant[]> {
-    const data = await this.makeRequest({
+    const body: any = {
       searchType: "nearby",
       lat,
       lng,
       radius,
-    });
+    };
+
+    // Add optional filters
+    if (options?.minPrice) body.minPrice = options.minPrice;
+    if (options?.maxPrice) body.maxPrice = options.maxPrice;
+    if (options?.openNow) body.openNow = options.openNow;
+    if (options?.keyword) body.keyword = options.keyword;
+
+    const data = await this.makeRequest(body);
 
     if (data.status === "OK") {
       return data.results;
