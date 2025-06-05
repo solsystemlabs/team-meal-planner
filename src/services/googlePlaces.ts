@@ -1,4 +1,4 @@
-// src/services/googlePlaces.ts
+// src/services/googlePlaces.ts - Updated for Supabase Edge Functions
 export interface Restaurant {
   place_id: string;
   name: string;
@@ -40,113 +40,111 @@ export interface PlacesSearchResponse {
 }
 
 class GooglePlacesService {
-  private apiKey: string;
-  private baseUrl = "https://maps.googleapis.com/maps/api/place";
+  private baseUrl: string;
 
   constructor() {
-    this.apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
-    if (!this.apiKey) {
-      console.warn(
-        "Google Places API key not found. Restaurant browser will not work.",
-      );
+    // Use local Supabase for development, production Supabase for deployed app
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    if (import.meta.env.DEV) {
+      // Local development - use local Supabase
+      this.baseUrl = "http://localhost:54321/functions/v1/places-proxy";
+    } else {
+      // Production - use your deployed Supabase
+      this.baseUrl = `${supabaseUrl}/functions/v1/places-proxy`;
+    }
+  }
+
+  private async makeRequest(body: any): Promise<any> {
+    try {
+      const response = await fetch(this.baseUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Error making request to places API:", error);
+      throw error;
     }
   }
 
   async searchNearbyRestaurants(
     lat: number,
     lng: number,
-    radius: number = 2000, // meters
+    radius: number = 2000,
   ): Promise<Restaurant[]> {
-    if (!this.apiKey) {
-      throw new Error("Google Places API key not configured");
-    }
+    const data = await this.makeRequest({
+      searchType: "nearby",
+      lat,
+      lng,
+      radius,
+    });
 
-    const url =
-      `${this.baseUrl}/nearbysearch/json?` +
-      `location=${lat},${lng}&` +
-      `radius=${radius}&` +
-      `type=restaurant&` +
-      `key=${this.apiKey}`;
-
-    try {
-      const response = await fetch(url);
-      const data: PlacesSearchResponse = await response.json();
-
-      if (data.status === "OK") {
-        return data.results;
-      } else {
-        throw new Error(`Places API error: ${data.status}`);
-      }
-    } catch (error) {
-      console.error("Error fetching restaurants:", error);
-      throw error;
+    if (data.status === "OK") {
+      return data.results;
+    } else {
+      throw new Error(`Places API error: ${data.status}`);
     }
   }
 
   async getPlaceDetails(placeId: string): Promise<Restaurant> {
-    if (!this.apiKey) {
-      throw new Error("Google Places API key not configured");
-    }
+    const data = await this.makeRequest({
+      searchType: "details",
+      placeId,
+    });
 
-    const url =
-      `${this.baseUrl}/details/json?` +
-      `place_id=${placeId}&` +
-      `fields=name,formatted_address,formatted_phone_number,website,rating,price_level&` +
-      `key=${this.apiKey}`;
-
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status === "OK") {
-        return data.result;
-      } else {
-        throw new Error(`Places API error: ${data.status}`);
-      }
-    } catch (error) {
-      console.error("Error fetching place details:", error);
-      throw error;
+    if (data.status === "OK") {
+      return data.result;
+    } else {
+      throw new Error(`Places API error: ${data.status}`);
     }
   }
 
   async searchPlaces(query: string): Promise<LocationSearchResult[]> {
-    if (!this.apiKey) {
-      throw new Error("Google Places API key not configured");
-    }
+    const data = await this.makeRequest({
+      searchType: "textsearch",
+      query,
+    });
 
-    const url =
-      `${this.baseUrl}/textsearch/json?` +
-      `query=${encodeURIComponent(query)}&` +
-      `key=${this.apiKey}`;
-
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status === "OK") {
-        return data.results.map((result: any) => ({
-          place_id: result.place_id,
-          formatted_address: result.formatted_address,
-          name: result.name,
-          geometry: {
-            location: {
-              lat: result.geometry.location.lat,
-              lng: result.geometry.location.lng,
-            },
+    if (data.status === "OK") {
+      return data.results.map((result: any) => ({
+        place_id: result.place_id,
+        formatted_address: result.formatted_address,
+        name: result.name,
+        geometry: {
+          location: {
+            lat: result.geometry.location.lat,
+            lng: result.geometry.location.lng,
           },
-        }));
-      } else {
-        throw new Error(`Places API error: ${data.status}`);
-      }
-    } catch (error) {
-      console.error("Error searching places:", error);
-      throw error;
+        },
+      }));
+    } else {
+      throw new Error(`Places API error: ${data.status}`);
     }
   }
 
   getPhotoUrl(photoReference: string, maxWidth: number = 400): string {
-    if (!this.apiKey) return "";
-    return `${this.baseUrl}/photo?maxwidth=${maxWidth}&photo_reference=${photoReference}&key=${this.apiKey}`;
+    // Photos still need direct access - consider proxying these too if needed
+    const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
+    if (!apiKey) return "";
+
+    return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photo_reference=${photoReference}&key=${apiKey}`;
   }
 }
 
