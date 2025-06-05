@@ -1,14 +1,11 @@
-// src/components/NextWeekView.tsx - Updated with Restaurant Browser Integration
 import React, { useState } from "react";
-import { Users, Plus, MapPin, Settings } from "lucide-react";
+import { Users, Plus, ListChecks } from "lucide-react";
 import { getNextWeek } from "../utils/dateHelpers";
 import { useAuth } from "../contexts/AuthContext";
 import { DragDropVoting } from "./DragDropVoting";
 import { VotingResults } from "./VotingResults";
 import { AdminControls } from "./AdminControls";
-import { RestaurantBrowser } from "./RestaurantBrowser";
-import { OfficeSettings } from "./OfficeSettings";
-import { Restaurant } from "../services/googlePlaces";
+import { RestaurantSorting } from "./RestaurantSorting";
 import {
   useWeekData,
   useAddSuggestion,
@@ -17,13 +14,6 @@ import {
   useConfirmSelection,
   useUndoSelection,
 } from "../hooks/useQueries";
-
-interface OfficeLocation {
-  lat: number;
-  lng: number;
-  address: string;
-  name?: string;
-}
 
 export const NextWeekView: React.FC = () => {
   const { user } = useAuth();
@@ -44,88 +34,20 @@ export const NextWeekView: React.FC = () => {
     description: "",
   });
 
-  // Restaurant details from browser selection
-  const [selectedRestaurantDetails, setSelectedRestaurantDetails] =
-    useState<Restaurant | null>(null);
-
-  // Modal states
-  const [showRestaurantBrowser, setShowRestaurantBrowser] = useState(false);
-  const [showOfficeSettings, setShowOfficeSettings] = useState(false);
-  const [officeLocation, setOfficeLocation] = useState<
-    OfficeLocation | undefined
-  >();
-
-  // Load office location on component mount
-  React.useEffect(() => {
-    const loadOfficeLocation = async () => {
-      const savedLocation = localStorage.getItem("office_location");
-      if (savedLocation) {
-        try {
-          const parsed = JSON.parse(savedLocation);
-          setOfficeLocation(parsed);
-          return; // Exit early if we have a saved location
-        } catch (err) {
-          console.warn("Failed to parse saved office location");
-        }
-      }
-
-      // If no saved location, try to get user's current location
-      if (navigator.geolocation) {
-        try {
-          const position = await new Promise<GeolocationPosition>(
-            (resolve, reject) => {
-              navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: false,
-                timeout: 5000,
-                maximumAge: 600000, // 10 minutes cache
-              });
-            },
-          );
-
-          const { latitude, longitude } = position.coords;
-
-          // Create a basic location object without requiring API call
-          const detectedLocation: OfficeLocation = {
-            lat: latitude,
-            lng: longitude,
-            address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-            name: "Detected Location",
-          };
-
-          setOfficeLocation(detectedLocation);
-        } catch (err) {
-          // Silently fall back to default location if geolocation fails
-          console.info("Could not detect location, using default");
-        }
-      }
-    };
-
-    loadOfficeLocation();
-
-    // Listen for office settings events from restaurant browser
-    const handleOpenOfficeSettings = () => {
-      setShowOfficeSettings(true);
-    };
-
-    window.addEventListener("openOfficeSettings", handleOpenOfficeSettings);
-
-    return () => {
-      window.removeEventListener(
-        "openOfficeSettings",
-        handleOpenOfficeSettings,
-      );
-    };
-  }, []);
+  // View state
+  const [activeVotingView, setActiveVotingView] = useState<"browse" | "rank">(
+    "browse",
+  );
 
   // Utility functions
   const userAttendance = attendance.find((a) => a.user_id === user?.id);
   const isUserAttending = userAttendance?.is_attending ?? false;
   const attendingCount = attendance.filter((a) => a.is_attending).length;
+  const attendingUsers = attendance
+    .filter((a) => a.is_attending)
+    .map((a) => a.user_id);
 
   const calculateWinner = () => {
-    const attendingUsers = attendance
-      .filter((a) => a.is_attending)
-      .map((a) => a.user_id);
     const relevantVotes = votes.filter((v) =>
       attendingUsers.includes(v.user_id),
     );
@@ -153,16 +75,6 @@ export const NextWeekView: React.FC = () => {
   const winnerSuggestionId = calculateWinner();
   const winnerSuggestion = suggestions.find((s) => s.id === winnerSuggestionId);
 
-  // Helper function for price level
-  const getPriceLevel = (level?: number): string => {
-    if (!level) return "";
-    return "$".repeat(level);
-  };
-
-  const handleLocationSaved = (location: OfficeLocation) => {
-    setOfficeLocation(location);
-  };
-
   // Event handlers
   const handleToggleAttendance = async () => {
     if (!user) return;
@@ -183,48 +95,17 @@ export const NextWeekView: React.FC = () => {
     if (!user || !newSuggestion.restaurant.trim()) return;
 
     try {
-      const suggestionData: any = {
+      await addSuggestionMutation.mutateAsync({
         user_id: user.id,
         restaurant: newSuggestion.restaurant,
+        description: newSuggestion.description || undefined,
         week_of: nextWeek,
-      };
-
-      // Add description if provided
-      if (newSuggestion.description.trim()) {
-        suggestionData.description = newSuggestion.description;
-      }
-
-      // Add restaurant details if selected from browser
-      if (selectedRestaurantDetails) {
-        suggestionData.address = selectedRestaurantDetails.formatted_address;
-        suggestionData.phone = selectedRestaurantDetails.formatted_phone_number;
-        suggestionData.website = selectedRestaurantDetails.website;
-        suggestionData.rating = selectedRestaurantDetails.rating;
-        suggestionData.price_level = selectedRestaurantDetails.price_level;
-        suggestionData.place_id = selectedRestaurantDetails.place_id;
-      }
-
-      await addSuggestionMutation.mutateAsync(suggestionData);
-
-      // Reset form
+      });
       setNewSuggestion({ restaurant: "", description: "" });
-      setSelectedRestaurantDetails(null);
     } catch (error) {
       console.error("Error adding suggestion:", error);
       alert("Failed to add suggestion. Please try again.");
     }
-  };
-
-  const handleRestaurantSelected = (restaurant: Restaurant) => {
-    // Only put the restaurant name in the main field
-    // Details will be stored separately in the database
-    setNewSuggestion({
-      restaurant: restaurant.name,
-      description: "", // Keep empty for user's custom notes
-    });
-
-    // Store restaurant details to be sent with the suggestion
-    setSelectedRestaurantDetails(restaurant);
   };
 
   const handleVotesUpdate = async (
@@ -305,53 +186,13 @@ export const NextWeekView: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Admin Settings Banner - Show if no office location is configured */}
-      {user?.is_admin && !officeLocation && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="bg-amber-100 p-2 rounded-lg">
-                <Settings className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-bold text-amber-800">
-                  Office Location Not Configured
-                </h3>
-                <p className="text-amber-700 text-sm">
-                  Set your office location to enable restaurant browsing for
-                  your team.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowOfficeSettings(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-medium transition-all"
-            >
-              Configure Now
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Attendance Section */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Attendance</h2>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-gray-600">
-              <Users className="w-5 h-5" />
-              <span>{attendingCount} attending</span>
-            </div>
-            {user?.is_admin && (
-              <button
-                onClick={() => setShowOfficeSettings(true)}
-                className="flex items-center space-x-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg px-2 py-1 transition-all"
-                title="Configure Office Location"
-              >
-                <Settings className="w-4 h-4" />
-                <span className="text-sm">Office Settings</span>
-              </button>
-            )}
+          <div className="flex items-center space-x-2 text-gray-600">
+            <Users className="w-5 h-5" />
+            <span>{attendingCount} attending</span>
           </div>
         </div>
         <button
@@ -378,33 +219,22 @@ export const NextWeekView: React.FC = () => {
             Suggest a Restaurant
           </h2>
           <div className="space-y-4">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                placeholder="Restaurant name"
-                value={newSuggestion.restaurant}
-                onChange={(e) =>
-                  setNewSuggestion({
-                    ...newSuggestion,
-                    restaurant: e.target.value,
-                  })
-                }
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={addSuggestionMutation.isPending}
-              />
-              <button
-                onClick={() => setShowRestaurantBrowser(true)}
-                type="button"
-                className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-3 rounded-lg font-medium transition-all flex items-center space-x-2"
-              >
-                <MapPin className="w-4 h-4" />
-                <span>Browse</span>
-              </button>
-            </div>
-
             <input
               type="text"
-              placeholder="Why do you recommend this place? (optional)"
+              placeholder="Restaurant name"
+              value={newSuggestion.restaurant}
+              onChange={(e) =>
+                setNewSuggestion({
+                  ...newSuggestion,
+                  restaurant: e.target.value,
+                })
+              }
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={addSuggestionMutation.isPending}
+            />
+            <input
+              type="text"
+              placeholder="Description (optional)"
               value={newSuggestion.description}
               onChange={(e) =>
                 setNewSuggestion({
@@ -415,31 +245,6 @@ export const NextWeekView: React.FC = () => {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={addSuggestionMutation.isPending}
             />
-
-            {/* Show selected restaurant details preview */}
-            {selectedRestaurantDetails && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-1">
-                  Selected Restaurant Details:
-                </h4>
-                <div className="text-sm text-blue-700 space-y-1">
-                  {selectedRestaurantDetails.formatted_address && (
-                    <p>📍 {selectedRestaurantDetails.formatted_address}</p>
-                  )}
-                  {selectedRestaurantDetails.rating && (
-                    <p>⭐ {selectedRestaurantDetails.rating} stars</p>
-                  )}
-                  {selectedRestaurantDetails.price_level && (
-                    <p>
-                      💰 {getPriceLevel(selectedRestaurantDetails.price_level)}
-                    </p>
-                  )}
-                  {selectedRestaurantDetails.formatted_phone_number && (
-                    <p>📞 {selectedRestaurantDetails.formatted_phone_number}</p>
-                  )}
-                </div>
-              </div>
-            )}
             <button
               onClick={handleAddSuggestion}
               disabled={
@@ -456,35 +261,64 @@ export const NextWeekView: React.FC = () => {
               </span>
             </button>
           </div>
-
-          {/* Restaurant Browser Modal */}
-          <RestaurantBrowser
-            isOpen={showRestaurantBrowser}
-            onClose={() => setShowRestaurantBrowser(false)}
-            onSelectRestaurant={handleRestaurantSelected}
-            officeLocation={officeLocation}
-          />
         </div>
       )}
 
-      {/* Office Settings Modal */}
-      <OfficeSettings
-        isOpen={showOfficeSettings}
-        onClose={() => setShowOfficeSettings(false)}
-        onLocationSaved={handleLocationSaved}
-        currentLocation={officeLocation}
-      />
-
-      {/* Voting Section - Show drag/drop if not confirmed, results if confirmed */}
+      {/* Voting Section - Show different views if not confirmed */}
       {!weekPlan ? (
-        <DragDropVoting
-          suggestions={suggestions}
-          votes={votes}
-          winnerSuggestionId={winnerSuggestionId}
-          isUserAttending={isUserAttending}
-          onVotesUpdate={handleVotesUpdate}
-        />
+        <div className="space-y-6">
+          {/* View Toggle for Voting */}
+          {suggestions.length > 0 && isUserAttending && (
+            <div className="flex space-x-1 bg-white p-1 rounded-xl shadow-sm">
+              <button
+                onClick={() => setActiveVotingView("browse")}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
+                  activeVotingView === "browse"
+                    ? "bg-gradient-to-r from-blue-500 to-slate-600 text-white shadow-md"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <Users className="w-4 h-4" />
+                  <span>Browse & Compare</span>
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveVotingView("rank")}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
+                  activeVotingView === "rank"
+                    ? "bg-gradient-to-r from-slate-600 to-blue-600 text-white shadow-md"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <ListChecks className="w-4 h-4" />
+                  <span>Rank Preferences</span>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Browse View with Sorting */}
+          {activeVotingView === "browse" ? (
+            <RestaurantSorting
+              suggestions={suggestions}
+              votes={votes}
+              attendingUserIds={attendingUsers}
+            />
+          ) : (
+            /* Drag & Drop Voting */
+            <DragDropVoting
+              suggestions={suggestions}
+              votes={votes}
+              winnerSuggestionId={winnerSuggestionId}
+              isUserAttending={isUserAttending}
+              onVotesUpdate={handleVotesUpdate}
+            />
+          )}
+        </div>
       ) : (
+        /* Show Results if confirmed */
         <VotingResults
           suggestions={suggestions}
           votes={votes}
