@@ -9,32 +9,45 @@ import {
   Plus,
   Search,
   Loader,
+  Settings,
 } from "lucide-react";
 import { googlePlacesService, Restaurant } from "../services/googlePlaces";
+
+interface OfficeLocation {
+  lat: number;
+  lng: number;
+  address: string;
+  name?: string;
+}
 
 interface RestaurantBrowserProps {
   onSelectRestaurant: (restaurant: Restaurant) => void;
   isOpen: boolean;
   onClose: () => void;
+  officeLocation?: OfficeLocation;
 }
 
-// Default office location - you can make this configurable later
-const OFFICE_LOCATION = {
-  lat: 34.8021, // Greenville, SC coordinates - update with your actual office
+// Default office location fallback
+const DEFAULT_OFFICE_LOCATION: OfficeLocation = {
+  lat: 34.8021, // Greenville, SC coordinates
   lng: -82.394,
-  address: "Greenville, SC", // Update with actual office address
+  address: "Greenville, SC",
 };
 
 export const RestaurantBrowser: React.FC<RestaurantBrowserProps> = ({
   onSelectRestaurant,
   isOpen,
   onClose,
+  officeLocation,
 }) => {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [radius, setRadius] = useState(2000); // meters
   const [searchInitiated, setSearchInitiated] = useState(false);
+
+  // Use passed office location or fall back to default
+  const currentOfficeLocation = officeLocation || DEFAULT_OFFICE_LOCATION;
 
   const searchRestaurants = async () => {
     setLoading(true);
@@ -43,8 +56,8 @@ export const RestaurantBrowser: React.FC<RestaurantBrowserProps> = ({
 
     try {
       const results = await googlePlacesService.searchNearbyRestaurants(
-        OFFICE_LOCATION.lat,
-        OFFICE_LOCATION.lng,
+        currentOfficeLocation.lat,
+        currentOfficeLocation.lng,
         radius,
       );
       setRestaurants(results);
@@ -97,15 +110,34 @@ export const RestaurantBrowser: React.FC<RestaurantBrowserProps> = ({
               <h2 className="text-2xl font-bold">Browse Nearby Restaurants</h2>
               <p className="text-blue-100 mt-1">
                 <MapPin className="w-4 h-4 inline mr-1" />
-                Near {OFFICE_LOCATION.address}
+                Near{" "}
+                {currentOfficeLocation.name
+                  ? `${currentOfficeLocation.name}, `
+                  : ""}
+                {currentOfficeLocation.address}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all"
-            >
-              ✕
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  // Close this modal and signal parent to open office settings
+                  onClose();
+                  // You could pass a callback to open office settings from parent
+                  const event = new CustomEvent("openOfficeSettings");
+                  window.dispatchEvent(event);
+                }}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all"
+                title="Configure Office Location"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+              <button
+                onClick={onClose}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         </div>
 
@@ -172,7 +204,10 @@ export const RestaurantBrowser: React.FC<RestaurantBrowserProps> = ({
               </h3>
               <p className="text-gray-500 mb-4">
                 Search for restaurants within {getDistanceText(radius)} of{" "}
-                {OFFICE_LOCATION.address}
+                {currentOfficeLocation.name
+                  ? `${currentOfficeLocation.name}, `
+                  : ""}
+                {currentOfficeLocation.address}
               </p>
               <button
                 onClick={searchRestaurants}

@@ -53,15 +53,64 @@ export const NextWeekView: React.FC = () => {
 
   // Load office location on component mount
   React.useEffect(() => {
-    const savedLocation = localStorage.getItem("office_location");
-    if (savedLocation) {
-      try {
-        const parsed = JSON.parse(savedLocation);
-        setOfficeLocation(parsed);
-      } catch {
-        console.warn("Failed to parse saved office location");
+    const loadOfficeLocation = async () => {
+      const savedLocation = localStorage.getItem("office_location");
+      if (savedLocation) {
+        try {
+          const parsed = JSON.parse(savedLocation);
+          setOfficeLocation(parsed);
+          return; // Exit early if we have a saved location
+        } catch (err) {
+          console.warn("Failed to parse saved office location");
+        }
       }
-    }
+
+      // If no saved location, try to get user's current location
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false,
+                timeout: 5000,
+                maximumAge: 600000, // 10 minutes cache
+              });
+            },
+          );
+
+          const { latitude, longitude } = position.coords;
+
+          // Create a basic location object without requiring API call
+          const detectedLocation: OfficeLocation = {
+            lat: latitude,
+            lng: longitude,
+            address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+            name: "Detected Location",
+          };
+
+          setOfficeLocation(detectedLocation);
+        } catch (err) {
+          // Silently fall back to default location if geolocation fails
+          console.info("Could not detect location, using default");
+        }
+      }
+    };
+
+    loadOfficeLocation();
+
+    // Listen for office settings events from restaurant browser
+    const handleOpenOfficeSettings = () => {
+      setShowOfficeSettings(true);
+    };
+
+    window.addEventListener("openOfficeSettings", handleOpenOfficeSettings);
+
+    return () => {
+      window.removeEventListener(
+        "openOfficeSettings",
+        handleOpenOfficeSettings,
+      );
+    };
   }, []);
 
   // Utility functions
@@ -237,6 +286,34 @@ export const NextWeekView: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* Admin Settings Banner - Show if no office location is configured */}
+      {user?.is_admin && !officeLocation && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl shadow-lg p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-amber-100 p-2 rounded-lg">
+                <Settings className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-amber-800">
+                  Office Location Not Configured
+                </h3>
+                <p className="text-amber-700 text-sm">
+                  Set your office location to enable restaurant browsing for
+                  your team.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowOfficeSettings(true)}
+              className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-medium transition-all"
+            >
+              Configure Now
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Attendance Section */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
@@ -341,6 +418,7 @@ export const NextWeekView: React.FC = () => {
             isOpen={showRestaurantBrowser}
             onClose={() => setShowRestaurantBrowser(false)}
             onSelectRestaurant={handleRestaurantSelected}
+            officeLocation={officeLocation}
           />
         </div>
       )}

@@ -1,16 +1,17 @@
 // src/components/OfficeSettings.tsx
+import React, { useState, useEffect } from "react";
 import {
-  CheckCircle,
-  Loader,
   MapPin,
   Save,
   Search,
+  Loader,
+  CheckCircle,
   Settings,
+  Navigation,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
 import {
   googlePlacesService,
-  type LocationSearchResult,
+  LocationSearchResult,
 } from "../services/googlePlaces";
 
 interface OfficeLocation {
@@ -43,12 +44,92 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({
     useState<OfficeLocation | null>(currentLocation || null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   useEffect(() => {
     if (currentLocation) {
       setSelectedLocation(currentLocation);
     }
   }, [currentLocation]);
+
+  const getCurrentLocation = async () => {
+    setGettingLocation(true);
+    setError(null);
+
+    try {
+      if (!navigator.geolocation) {
+        throw new Error("Geolocation is not supported by this browser");
+      }
+
+      const position = await new Promise<GeolocationPosition>(
+        (resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000, // 5 minutes cache
+          });
+        },
+      );
+
+      const { latitude, longitude } = position.coords;
+
+      // Use reverse geocoding to get a readable address
+      try {
+        // We can use the browser's built-in reverse geocoding or Google's
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${import.meta.env.VITE_GOOGLE_PLACES_API_KEY}`,
+        );
+        const data = await response.json();
+
+        if (data.status === "OK" && data.results.length > 0) {
+          const result = data.results[0];
+          const location: OfficeLocation = {
+            lat: latitude,
+            lng: longitude,
+            address: result.formatted_address,
+            name: "Current Location",
+          };
+          setSelectedLocation(location);
+        } else {
+          throw new Error("Could not get address for current location");
+        }
+      } catch (geocodeError) {
+        // Fallback to coordinates only
+        const location: OfficeLocation = {
+          lat: latitude,
+          lng: longitude,
+          address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+          name: "Current Location",
+        };
+        setSelectedLocation(location);
+      }
+    } catch (err) {
+      if (err instanceof GeolocationPositionError) {
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            setError(
+              "Location access denied. Please enable location permissions and try again.",
+            );
+            break;
+          case err.POSITION_UNAVAILABLE:
+            setError("Location information is unavailable.");
+            break;
+          case err.TIMEOUT:
+            setError("Location request timed out. Please try again.");
+            break;
+          default:
+            setError("An unknown error occurred while getting location.");
+            break;
+        }
+      } else {
+        setError(
+          err instanceof Error ? err.message : "Failed to get current location",
+        );
+      }
+    } finally {
+      setGettingLocation(false);
+    }
+  };
 
   const searchLocations = async () => {
     if (!searchQuery.trim()) return;
@@ -94,7 +175,7 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({
         setSaved(false);
         onClose();
       }, 1500);
-    } catch {
+    } catch (err) {
       setError("Failed to save office location");
     } finally {
       setSaving(false);
@@ -180,7 +261,7 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Search for Your Office Location
                   </label>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-2 mb-3">
                     <input
                       type="text"
                       value={searchQuery}
@@ -201,6 +282,26 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({
                         <Search className="w-4 h-4" />
                       )}
                       <span>Search</span>
+                    </button>
+                  </div>
+
+                  {/* Use Current Location Button */}
+                  <div className="flex justify-center">
+                    <button
+                      onClick={getCurrentLocation}
+                      disabled={gettingLocation}
+                      className="flex items-center space-x-2 bg-green-100 hover:bg-green-200 text-green-700 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50"
+                    >
+                      {gettingLocation ? (
+                        <Loader className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Navigation className="w-4 h-4" />
+                      )}
+                      <span>
+                        {gettingLocation
+                          ? "Getting Location..."
+                          : "Use Current Location"}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -273,12 +374,13 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         onChange={(e) => {
                           const lat = parseFloat(e.target.value);
-                          if (!isNaN(lat) && selectedLocation) {
+                          if (!isNaN(lat)) {
                             setSelectedLocation({
-                              ...selectedLocation,
                               lat,
+                              lng: selectedLocation?.lng || 0,
                               address:
-                                selectedLocation.address || "Manual Entry",
+                                selectedLocation?.address || "Manual Entry",
+                              name: "Manual Entry",
                             });
                           }
                         }}
@@ -295,12 +397,13 @@ export const OfficeSettings: React.FC<OfficeSettingsProps> = ({
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                         onChange={(e) => {
                           const lng = parseFloat(e.target.value);
-                          if (!isNaN(lng) && selectedLocation) {
+                          if (!isNaN(lng)) {
                             setSelectedLocation({
-                              ...selectedLocation,
+                              lat: selectedLocation?.lat || 0,
                               lng,
                               address:
-                                selectedLocation.address || "Manual Entry",
+                                selectedLocation?.address || "Manual Entry",
+                              name: "Manual Entry",
                             });
                           }
                         }}
