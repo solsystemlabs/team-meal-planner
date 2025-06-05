@@ -44,6 +44,10 @@ export const NextWeekView: React.FC = () => {
     description: "",
   });
 
+  // Restaurant details from browser selection
+  const [selectedRestaurantDetails, setSelectedRestaurantDetails] =
+    useState<Restaurant | null>(null);
+
   // Modal states
   const [showRestaurantBrowser, setShowRestaurantBrowser] = useState(false);
   const [showOfficeSettings, setShowOfficeSettings] = useState(false);
@@ -179,13 +183,32 @@ export const NextWeekView: React.FC = () => {
     if (!user || !newSuggestion.restaurant.trim()) return;
 
     try {
-      await addSuggestionMutation.mutateAsync({
+      const suggestionData: any = {
         user_id: user.id,
         restaurant: newSuggestion.restaurant,
-        description: newSuggestion.description || undefined,
         week_of: nextWeek,
-      });
+      };
+
+      // Add description if provided
+      if (newSuggestion.description.trim()) {
+        suggestionData.description = newSuggestion.description;
+      }
+
+      // Add restaurant details if selected from browser
+      if (selectedRestaurantDetails) {
+        suggestionData.address = selectedRestaurantDetails.formatted_address;
+        suggestionData.phone = selectedRestaurantDetails.formatted_phone_number;
+        suggestionData.website = selectedRestaurantDetails.website;
+        suggestionData.rating = selectedRestaurantDetails.rating;
+        suggestionData.price_level = selectedRestaurantDetails.price_level;
+        suggestionData.place_id = selectedRestaurantDetails.place_id;
+      }
+
+      await addSuggestionMutation.mutateAsync(suggestionData);
+
+      // Reset form
       setNewSuggestion({ restaurant: "", description: "" });
+      setSelectedRestaurantDetails(null);
     } catch (error) {
       console.error("Error adding suggestion:", error);
       alert("Failed to add suggestion. Please try again.");
@@ -193,19 +216,15 @@ export const NextWeekView: React.FC = () => {
   };
 
   const handleRestaurantSelected = (restaurant: Restaurant) => {
-    const description = [
-      restaurant.formatted_address,
-      restaurant.rating ? `${restaurant.rating}⭐` : "",
-      restaurant.price_level ? getPriceLevel(restaurant.price_level) : "",
-      restaurant.formatted_phone_number || "",
-    ]
-      .filter(Boolean)
-      .join(" • ");
-
+    // Only put the restaurant name in the main field
+    // Details will be stored separately in the database
     setNewSuggestion({
       restaurant: restaurant.name,
-      description: description,
+      description: "", // Keep empty for user's custom notes
     });
+
+    // Store restaurant details to be sent with the suggestion
+    setSelectedRestaurantDetails(restaurant);
   };
 
   const handleVotesUpdate = async (
@@ -385,7 +404,7 @@ export const NextWeekView: React.FC = () => {
 
             <input
               type="text"
-              placeholder="Description (optional)"
+              placeholder="Why do you recommend this place? (optional)"
               value={newSuggestion.description}
               onChange={(e) =>
                 setNewSuggestion({
@@ -396,6 +415,31 @@ export const NextWeekView: React.FC = () => {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={addSuggestionMutation.isPending}
             />
+
+            {/* Show selected restaurant details preview */}
+            {selectedRestaurantDetails && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-800 mb-1">
+                  Selected Restaurant Details:
+                </h4>
+                <div className="text-sm text-blue-700 space-y-1">
+                  {selectedRestaurantDetails.formatted_address && (
+                    <p>📍 {selectedRestaurantDetails.formatted_address}</p>
+                  )}
+                  {selectedRestaurantDetails.rating && (
+                    <p>⭐ {selectedRestaurantDetails.rating} stars</p>
+                  )}
+                  {selectedRestaurantDetails.price_level && (
+                    <p>
+                      💰 {getPriceLevel(selectedRestaurantDetails.price_level)}
+                    </p>
+                  )}
+                  {selectedRestaurantDetails.formatted_phone_number && (
+                    <p>📞 {selectedRestaurantDetails.formatted_phone_number}</p>
+                  )}
+                </div>
+              </div>
+            )}
             <button
               onClick={handleAddSuggestion}
               disabled={

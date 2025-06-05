@@ -79,7 +79,7 @@ export const RestaurantBrowser: React.FC<RestaurantBrowserProps> = ({
       );
       onSelectRestaurant({ ...restaurant, ...details });
       onClose();
-    } catch {
+    } catch (err) {
       // If details fetch fails, use basic info
       onSelectRestaurant(restaurant);
       onClose();

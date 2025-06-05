@@ -1,6 +1,8 @@
+// src/components/VotingResults.tsx
 import React from "react";
 import { Trophy, Users, Medal } from "lucide-react";
 import { Suggestion, Vote, Attendance } from "../types/database";
+import { SuggestionCard } from "./SuggestionCard";
 
 interface VotingResultsProps {
   suggestions: Suggestion[];
@@ -71,19 +73,6 @@ export const VotingResults: React.FC<VotingResultsProps> = ({
     }
   };
 
-  const getRankColor = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return "border-yellow-300 bg-yellow-50";
-      case 2:
-        return "border-gray-300 bg-gray-50";
-      case 3:
-        return "border-amber-300 bg-amber-50";
-      default:
-        return "border-gray-200 bg-white";
-    }
-  };
-
   if (suggestions.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -112,81 +101,90 @@ export const VotingResults: React.FC<VotingResultsProps> = ({
           const isWinner = result.id === winnerSuggestionId;
 
           return (
-            <div
-              key={result.id}
-              className={`border-2 rounded-xl p-4 transition-all ${
-                isWinner
-                  ? "border-green-400 bg-green-50 shadow-md"
-                  : getRankColor(result.rank)
-              }`}
-            >
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0">{getRankIcon(result.rank)}</div>
+            <div key={result.id} className="flex items-center space-x-4">
+              {/* Rank Icon */}
+              <div className="flex-shrink-0">{getRankIcon(result.rank)}</div>
 
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <h3 className="font-bold text-lg text-gray-800">
-                      {result.restaurant}
-                    </h3>
-                    {isWinner && (
-                      <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold">
-                        SELECTED
-                      </div>
-                    )}
-                  </div>
-                  {result.description && (
-                    <p className="text-gray-600 mb-2">{result.description}</p>
-                  )}
-                  <p className="text-sm text-gray-500">
-                    Suggested by {result.user_name}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <div className="flex flex-col items-end space-y-1">
-                    <div className="text-lg font-bold text-purple-600">
-                      {result.totalScore} pts
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {result.voteCount} vote{result.voteCount !== 1 ? "s" : ""}
-                    </div>
-                    {result.voteCount > 0 && (
-                      <div className="text-xs text-gray-400">
-                        Avg: {result.averageRank.toFixed(1)}
-                      </div>
-                    )}
-                  </div>
-                </div>
+              {/* Enhanced Suggestion Card */}
+              <div className="flex-1">
+                <SuggestionCard
+                  suggestion={result}
+                  isWinner={isWinner}
+                  showRanking={false}
+                  className={`${
+                    isWinner
+                      ? "border-green-400 bg-green-50 shadow-md"
+                      : result.rank === 1
+                        ? "border-yellow-300 bg-yellow-50"
+                        : result.rank === 2
+                          ? "border-gray-300 bg-gray-50"
+                          : result.rank === 3
+                            ? "border-amber-300 bg-amber-50"
+                            : "border-gray-200 bg-white"
+                  }`}
+                />
               </div>
 
-              {/* Show voting breakdown */}
-              {result.voteCount > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Ranking breakdown:</span>
-                    <div className="flex space-x-1">
-                      {[...Array(suggestions.length)].map((_, i) => {
-                        const rank = i + 1;
-                        const votesAtRank = relevantVotes.filter(
-                          (v) =>
-                            v.suggestion_id === result.id && v.rank === rank,
-                        ).length;
-
-                        if (votesAtRank === 0) return null;
-
-                        return (
-                          <div
-                            key={rank}
-                            className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
-                          >
-                            #{rank}: {votesAtRank}
-                          </div>
-                        );
-                      })}
-                    </div>
+              {/* Voting Stats */}
+              <div className="text-right flex-shrink-0 px-4">
+                <div className="flex flex-col items-end space-y-1">
+                  <div className="text-lg font-bold text-purple-600">
+                    {result.totalScore} pts
                   </div>
+                  <div className="text-sm text-gray-500">
+                    {result.voteCount} vote{result.voteCount !== 1 ? "s" : ""}
+                  </div>
+                  {result.voteCount > 0 && (
+                    <div className="text-xs text-gray-400">
+                      Avg: {result.averageRank.toFixed(1)}
+                    </div>
+                  )}
+                  {isWinner && (
+                    <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold">
+                      SELECTED
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Voting Breakdown */}
+      <div className="mt-6 space-y-3">
+        {results.map((result) => {
+          if (result.voteCount === 0) return null;
+
+          return (
+            <div
+              key={`breakdown-${result.id}`}
+              className="p-3 bg-gray-50 rounded-lg"
+            >
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">
+                  {result.restaurant} - Ranking breakdown:
+                </span>
+                <div className="flex space-x-1">
+                  {[...Array(suggestions.length)].map((_, i) => {
+                    const rank = i + 1;
+                    const votesAtRank = relevantVotes.filter(
+                      (v) => v.suggestion_id === result.id && v.rank === rank,
+                    ).length;
+
+                    if (votesAtRank === 0) return null;
+
+                    return (
+                      <div
+                        key={rank}
+                        className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
+                      >
+                        #{rank}: {votesAtRank}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           );
         })}

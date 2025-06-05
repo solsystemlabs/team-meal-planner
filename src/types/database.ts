@@ -1,3 +1,4 @@
+// src/types/database.ts - Updated with restaurant details
 export interface User {
   id: string;
   email: string;
@@ -11,9 +12,16 @@ export interface Suggestion {
   user_id: string;
   user_name: string;
   restaurant: string;
-  description: string;
+  description: string; // Custom user description/notes
   week_of: string;
   created_at: string;
+  // New restaurant detail fields
+  address?: string;
+  phone?: string;
+  website?: string;
+  rating?: number;
+  price_level?: number;
+  place_id?: string;
 }
 
 export interface Vote {
