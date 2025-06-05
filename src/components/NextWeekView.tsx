@@ -1,10 +1,14 @@
+// src/components/NextWeekView.tsx - Updated with Restaurant Browser Integration
 import React, { useState } from "react";
-import { Users, Plus } from "lucide-react";
+import { Users, Plus, MapPin, Settings } from "lucide-react";
 import { getNextWeek } from "../utils/dateHelpers";
 import { useAuth } from "../contexts/AuthContext";
 import { DragDropVoting } from "./DragDropVoting";
 import { VotingResults } from "./VotingResults";
 import { AdminControls } from "./AdminControls";
+import { RestaurantBrowser } from "./RestaurantBrowser";
+import { OfficeSettings } from "./OfficeSettings";
+import { Restaurant } from "../services/googlePlaces";
 import {
   useWeekData,
   useAddSuggestion,
@@ -13,6 +17,13 @@ import {
   useConfirmSelection,
   useUndoSelection,
 } from "../hooks/useQueries";
+
+interface OfficeLocation {
+  lat: number;
+  lng: number;
+  address: string;
+  name?: string;
+}
 
 export const NextWeekView: React.FC = () => {
   const { user } = useAuth();
@@ -32,6 +43,26 @@ export const NextWeekView: React.FC = () => {
     restaurant: "",
     description: "",
   });
+
+  // Modal states
+  const [showRestaurantBrowser, setShowRestaurantBrowser] = useState(false);
+  const [showOfficeSettings, setShowOfficeSettings] = useState(false);
+  const [officeLocation, setOfficeLocation] = useState<
+    OfficeLocation | undefined
+  >();
+
+  // Load office location on component mount
+  React.useEffect(() => {
+    const savedLocation = localStorage.getItem("office_location");
+    if (savedLocation) {
+      try {
+        const parsed = JSON.parse(savedLocation);
+        setOfficeLocation(parsed);
+      } catch {
+        console.warn("Failed to parse saved office location");
+      }
+    }
+  }, []);
 
   // Utility functions
   const userAttendance = attendance.find((a) => a.user_id === user?.id);
@@ -69,6 +100,16 @@ export const NextWeekView: React.FC = () => {
   const winnerSuggestionId = calculateWinner();
   const winnerSuggestion = suggestions.find((s) => s.id === winnerSuggestionId);
 
+  // Helper function for price level
+  const getPriceLevel = (level?: number): string => {
+    if (!level) return "";
+    return "$".repeat(level);
+  };
+
+  const handleLocationSaved = (location: OfficeLocation) => {
+    setOfficeLocation(location);
+  };
+
   // Event handlers
   const handleToggleAttendance = async () => {
     if (!user) return;
@@ -100,6 +141,22 @@ export const NextWeekView: React.FC = () => {
       console.error("Error adding suggestion:", error);
       alert("Failed to add suggestion. Please try again.");
     }
+  };
+
+  const handleRestaurantSelected = (restaurant: Restaurant) => {
+    const description = [
+      restaurant.formatted_address,
+      restaurant.rating ? `${restaurant.rating}⭐` : "",
+      restaurant.price_level ? getPriceLevel(restaurant.price_level) : "",
+      restaurant.formatted_phone_number || "",
+    ]
+      .filter(Boolean)
+      .join(" • ");
+
+    setNewSuggestion({
+      restaurant: restaurant.name,
+      description: description,
+    });
   };
 
   const handleVotesUpdate = async (
@@ -143,18 +200,10 @@ export const NextWeekView: React.FC = () => {
   };
 
   const handleUndoSelection = async () => {
-    if (!user?.is_admin || !weekPlan) {
-      console.log("Cannot undo: user not admin or no week plan", {
-        user: user?.is_admin,
-        weekPlan: !!weekPlan,
-      });
-      return;
-    }
+    if (!user?.is_admin || !weekPlan) return;
 
     try {
-      console.log("Attempting to delete week plan with ID:", weekPlan.id);
       await undoSelectionMutation.mutateAsync(weekPlan.id);
-      console.log("Successfully deleted week plan");
     } catch (error) {
       console.error("Error undoing selection:", error);
       alert("Failed to undo selection. Please try again.");
@@ -192,9 +241,21 @@ export const NextWeekView: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Attendance</h2>
-          <div className="flex items-center space-x-2 text-gray-600">
-            <Users className="w-5 h-5" />
-            <span>{attendingCount} attending</span>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 text-gray-600">
+              <Users className="w-5 h-5" />
+              <span>{attendingCount} attending</span>
+            </div>
+            {user?.is_admin && (
+              <button
+                onClick={() => setShowOfficeSettings(true)}
+                className="flex items-center space-x-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg px-2 py-1 transition-all"
+                title="Configure Office Location"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="text-sm">Office Settings</span>
+              </button>
+            )}
           </div>
         </div>
         <button
@@ -221,19 +282,30 @@ export const NextWeekView: React.FC = () => {
             Suggest a Restaurant
           </h2>
           <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Restaurant name"
-              value={newSuggestion.restaurant}
-              onChange={(e) =>
-                setNewSuggestion({
-                  ...newSuggestion,
-                  restaurant: e.target.value,
-                })
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={addSuggestionMutation.isPending}
-            />
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                placeholder="Restaurant name"
+                value={newSuggestion.restaurant}
+                onChange={(e) =>
+                  setNewSuggestion({
+                    ...newSuggestion,
+                    restaurant: e.target.value,
+                  })
+                }
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={addSuggestionMutation.isPending}
+              />
+              <button
+                onClick={() => setShowRestaurantBrowser(true)}
+                type="button"
+                className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-3 rounded-lg font-medium transition-all flex items-center space-x-2"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>Browse</span>
+              </button>
+            </div>
+
             <input
               type="text"
               placeholder="Description (optional)"
@@ -263,18 +335,31 @@ export const NextWeekView: React.FC = () => {
               </span>
             </button>
           </div>
+
+          {/* Restaurant Browser Modal */}
+          <RestaurantBrowser
+            isOpen={showRestaurantBrowser}
+            onClose={() => setShowRestaurantBrowser(false)}
+            onSelectRestaurant={handleRestaurantSelected}
+          />
         </div>
       )}
+
+      {/* Office Settings Modal */}
+      <OfficeSettings
+        isOpen={showOfficeSettings}
+        onClose={() => setShowOfficeSettings(false)}
+        onLocationSaved={handleLocationSaved}
+        currentLocation={officeLocation}
+      />
 
       {/* Voting Section - Show drag/drop if not confirmed, results if confirmed */}
       {!weekPlan ? (
         <DragDropVoting
           suggestions={suggestions}
           votes={votes}
-          attendance={attendance}
           winnerSuggestionId={winnerSuggestionId}
           isUserAttending={isUserAttending}
-          isLoading={isLoading}
           onVotesUpdate={handleVotesUpdate}
         />
       ) : (
